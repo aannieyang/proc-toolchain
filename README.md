@@ -15,6 +15,7 @@ This repository provides an automated, local way to test your ECE 350 processor 
 4. Install pip [here](https://pip.pypa.io/en/stable/installation/)
    - Check you have pip installed by running `pip --version`
 5. Install required packages by running `pip install -r requirements.txt`
+6. To pull new changes from the remote repository, run `git pull --ff-only`
 
 
 ## Usage
