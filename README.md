@@ -18,6 +18,11 @@ This repository provides an automated, local way to test your ECE 350 processor 
 
 ## Updating the Autotester 
 ### From a Forked Repo (Recommended)
+1. Run `git remote add upstream https://github.com/ece350TA/proc-toolchain.git` to add the original repository as an upstream remote.
+2. Run `git fetch upstream` to pull new changes from the original repository.
+3. Run `git merge upstream/main` to merge the changes into your local main branch.
+
+**NOTE:** If the automatic merge in step 3 fails and you get a merge conflict (e.g., you edited one of the Python files), come to office hours for help. 
 
 ### From a Cloned Repo
 1. Run `git pull --no-rebase` to pull new changes from the remote repository.
