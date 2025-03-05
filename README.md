@@ -4,9 +4,7 @@ This repository provides an automated, local way to test your ECE 350 processor 
 
 ## Setup
 **Note:** At each step, you may need to restart your terminal session to see the changes.
-1. For Windows users, install Git Bash [here](https://git-scm.com/downloads/win)
-   - Verify you have Git Bash installed by launching the application through the Start Menu or through an application like VSCode
-   - Going forward, **only** use Git Bash 
+1. Follow the *Private Fork* section of the [Git setup guide](https://docs.google.com/document/d/1yTgAMt511NsHbNm4u5v4_3lDaHDfIzQTBqMd2rstJxM/edit?tab=t.0#heading=h.krj7x2tq9xbq) to create a fork of this repository. 
 2. Install Icarus Verilog and GTKWave by following the guide [here](https://docs.google.com/document/d/1RaLEdjCxocIHsXdHlYIY3IXyU-FsCGMA046p8uV3ypU/edit?usp=drive_link)
    - Check you have Icarus Verilog installed by running `iverilog -V` in your terminal
    - Check you have GTKWave installed by running `gtkwave` and verifying the application opens
@@ -15,21 +13,6 @@ This repository provides an automated, local way to test your ECE 350 processor 
 4. Install pip [here](https://pip.pypa.io/en/stable/installation/)
    - Check you have pip installed by running `pip --version`
 5. Install required packages by running `pip install -r requirements.txt`
-
-## Updating the Autotester 
-### From a Forked Repo (Recommended)
-1. Run `git remote add upstream https://github.com/ece350TA/proc-toolchain.git` to add the original repository as an upstream remote.
-2. Run `git fetch upstream` to pull new changes from the original repository.
-3. Run `git merge upstream/main` to merge the changes into your local main branch.
-
-**NOTE:** If the automatic merge in step 3 fails and you get a merge conflict (e.g., you edited one of the Python files), come to office hours for help. 
-
-### From a Cloned Repo
-1. Run `git pull --no-rebase` to pull new changes from the remote repository.
-2. This may pull up a merge conflict editor. Type `:wq` and then press `Enter` to save and quit. 
-
-**NOTE:** If the automatic merge in step 2 fails and you get a merge conflict (e.g., you edited one of the Python files), come to office hours for help. 
-
 
 ## Usage
 1. Place your processor source files in the `main/proc` directory.
