@@ -18,8 +18,9 @@ This repository provides an automated, local way to test your ECE 350 processor 
 
 ## Updating the Autotester
 1. Run `git pull --no-rebase` to pull new changes from the remote repository.
-2. This may pull up a merge conflict editor. Type `:wq` to save and quit.
-3. If you get a merge conflict (e.g., you edited one of the Python files), come to office hours for help. 
+2. This may pull up a merge conflict editor. Type `:wq` and then press `Enter` to save and quit. 
+
+**NOTE:** If the automatic merge in step 2 fails and you get a merge conflict (e.g., you edited one of the Python files), come to office hours for help. 
 
 
 ## Usage
