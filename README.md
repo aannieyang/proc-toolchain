@@ -16,7 +16,10 @@ This repository provides an automated, local way to test your ECE 350 processor 
    - Check you have pip installed by running `pip --version`
 5. Install required packages by running `pip install -r requirements.txt`
 
-## Updating the Autotester
+## Updating the Autotester 
+### From a Forked Repo (Recommended)
+
+### From a Cloned Repo
 1. Run `git pull --no-rebase` to pull new changes from the remote repository.
 2. This may pull up a merge conflict editor. Type `:wq` and then press `Enter` to save and quit. 
 
