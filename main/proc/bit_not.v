@@ -1,0 +1,37 @@
+module bit_not(A,S);
+    input [31:0] A;
+    output [31:0] S;
+
+    not (S[0],A[0]);
+    not (S[1],A[1]);
+    not (S[2],A[2]);
+    not (S[3],A[3]);
+    not (S[4],A[4]);
+    not (S[5],A[5]);
+    not (S[6],A[6]);
+    not (S[7],A[7]);
+    not (S[8],A[8]);
+    not (S[9],A[9]);
+    not (S[10],A[10]);
+    not (S[11],A[11]);
+    not (S[12],A[12]);
+    not (S[13],A[13]);
+    not (S[14],A[14]);
+    not (S[15],A[15]);
+    not (S[16],A[16]);
+    not (S[17],A[17]);
+    not (S[18],A[18]);
+    not (S[19],A[19]);
+    not (S[20],A[20]);
+    not (S[21],A[21]);
+    not (S[22],A[22]);
+    not (S[23],A[23]);
+    not (S[24],A[24]);
+    not (S[25],A[25]);
+    not (S[26],A[26]);
+    not (S[27],A[27]);
+    not (S[28],A[28]);
+    not (S[29],A[29]);
+    not (S[30],A[30]);
+    not (S[31],A[31]);
+endmodule

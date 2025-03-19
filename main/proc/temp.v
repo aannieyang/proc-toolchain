@@ -17,7 +17,7 @@
  *
  *
  */
-module processor(
+module temp(
     // Control signals
     clock,                          // I: The master clock
     reset,                          // I: A reset signal
@@ -109,8 +109,7 @@ module processor(
     wire [31:0] dxa_out, dxb_out, dxinsn_out, dxinsn_in;
     assign dxinsn_in = stall ? 32'b0 : fdinsn_out;
 
-    // do i have to flush here???
-    dx_latch dx(~clock, 1'b1, reset, fdpc_out, dxpc_out, taken ? 32'b0 : dxinsn_in, dxinsn_out, data_readRegA, dxa_out, data_readRegB, dxb_out);
+    dx_latch dx(~clock, ~stall, reset, fdpc_out, dxpc_out, taken ? 32'b0 : dxinsn_in, dxinsn_out, data_readRegA, dxa_out, data_readRegB, dxb_out);
 
     // ================== EXECUTE ==================
 
@@ -156,9 +155,6 @@ module processor(
                     (alu_overflow & dx_sub) ? 32'd3 :
                     alu_res;
 
-    // if setx, use immediate (T), otherwise normal regB
-    assign xmb_in = dx_setx ? t : dxb_out;
-
     // jal => $31 = PC+1
     assign xmo_in = (opcode==5'b00011) ? dxpc_out : (dx_setx ? t : alu_out);
     assign jump = (opcode==5'b00011) | (opcode==5'b00001) | (opcode==5'b00100);
@@ -168,26 +164,31 @@ module processor(
     assign t = dx_jr ? dxb_out : tempt;
 
     // Multdiv
-    wire dx_mult, dx_div, multdiv_exception, multdiv_resultRDY, ready, multdiv_stall, is_mult, is_div;
+    wire dx_mult, dx_div, multdiv_exception, multdiv_resultRDY, ready, multdiv_stall, ovf_out;
     wire [31:0] multdiv_result, multdivinsn_out, multdiv_a, multdiv_b, multdiv_res;
     assign dx_mult = (opcode==5'b0) & (alu_opcode==5'b00110);
     assign dx_div = (opcode==5'b0) & (alu_opcode==5'b00111);
 
-    md_latch multdiv(~clock, dx_mult|dx_div, reset, dxinsn_out, multdivinsn_out, dxa_out, multdiv_a, dxb_out, multdiv_b, multdiv_stall, multdiv_resultRDY, dx_mult, is_mult, dx_div, is_div);
+    md_latch multdiv(~clock, dx_mult|dx_div, reset, dxinsn_out, multdivinsn_out, dxa_out, multdiv_a, dxb_out, multdiv_b, multdiv_stall, multdiv_resultRDY);
     multdiv op(.data_operandA(multdiv_a), .data_operandB(multdiv_b), .ctrl_MULT(dx_mult), .ctrl_DIV(dx_div), .clock(clock), .data_result(multdiv_res), .data_exception(multdiv_exception), .data_resultRDY(multdiv_resultRDY));
     
-    wire rstatus;
+    assign multdiv_result = rstatus&dx_mult ? 32'd4 : (rstatus&dx_div ? 32'd5 : multdiv_res);
 
-    assign multdiv_result = rstatus&is_mult ? 32'd4 : (rstatus&is_div ? 32'd5 : multdiv_res);
+    wire rstatus;
     assign rstatus = (alu_overflow&(opcode==5'b0|opcode==5'b00101)) | (multdiv_exception&multdiv_resultRDY);
 
     // Latch ALU result
     // Latch instruction
     wire [31:0] xmo_out, xmb_out, xminsn_out, xminsn_in;
 
+    // if setx, use immediate (T), otherwise normal regB
+    assign xmb_in = dx_setx ? t :
+                    (dx_mult|dx_div) ? multdiv_result :
+                    dxb_out;
+
     assign xminsn_in[31:27] = dxinsn_out[31:27];
     assign xminsn_in[21:0] = dxinsn_out[21:0];
-    assign xminsn_in[26:22] = (rstatus&(alu_overflow&(opcode==5'b0|opcode==5'b00101))) ? 5'd30 : dxinsn_out[26:22];
+    assign xminsn_in[26:22] = rstatus ? 5'd30 : dxinsn_out[26:22];
 
     xm_latch xm(~clock, 1'b1, reset, xminsn_in, xminsn_out, xmo_in, xmo_out, xmb_in, xmb_out);
 
@@ -203,8 +204,10 @@ module processor(
     assign data = xmb_out;
 
     // Latch instruction
-    wire [31:0] mwinsn_out, mwo_out, mwd_out;
-    mw_latch mw(~clock, 1'b1, reset, xminsn_out, mwinsn_out, xmo_out, mwo_out, q_dmem, mwd_out);
+    wire [31:0] mwinsn_out, mwo_out, mwd_out, mwd_in;
+    assign mwd_in = wren ? q_dmem : xmb_out;
+    
+    mw_latch mw(~clock, 1'b1, reset, xminsn_out, mwinsn_out, xmo_out, mwo_out, mwd_in, mwd_out);
 
     // ================== WRITEBACK ==================
 
@@ -218,17 +221,14 @@ module processor(
     assign mw_jal = (mw_opcode==5'b00011);
     
     // Set destination register and data to write
-    assign ctrl_writeReg = multdiv_resultRDY ? (rstatus ? 5'd30 : multdivinsn_out[26:22]) :
-                            mw_jal ? 5'd31 :
+    assign ctrl_writeReg = mw_jal ? 5'd31 :
                             mw_setx ? 5'd30 :
                             mwinsn_out[26:22];
 
-    assign data_writeReg = mw_lw ? q_dmem : (multdiv_resultRDY ? multdiv_result : mwo_out);
+    assign data_writeReg = mw_lw ? q_dmem : mwo_out;
 
     // Set write enable
     assign ctrl_writeEnable = mw_insnWE | mw_lw | mw_setx | mw_addi | mw_jal;
-
-    // temporarily until i do branching
 
     assign stall = multdiv_stall | dx_mult | dx_div;
 
