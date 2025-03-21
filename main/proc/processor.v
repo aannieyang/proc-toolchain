@@ -148,8 +148,24 @@ module processor(
 
     // Use ALU to compute result
     wire alu_overflow;
-    wire [31:0] alu_res;
-    alu ALU(.data_operandA(dxa_out), .data_operandB(operandB), .ctrl_ALUopcode(alu_opcode), .ctrl_shiftamt(shamt), .data_result(alu_res), .isNotEqual(isNotEqual), .isLessThan(isLessThan), .overflow(alu_overflow)); 
+    wire [31:0] alu_res, dxa_out_bypass, operandB_bypass, xmo_out;
+    wire [1:0] alu_bypass_select, aluinb_bypass_select;
+
+    // if rd in xm == rs [21:17] in dx: mx bypass (01)
+    // if rd in mw == rs [21:17] in dx: wx bypass (10)
+    // else dxa (00)
+
+    assign alu_bypass_select[0] = xminsn_out[26:22] == dxinsn_out[21:17];
+    assign alu_bypass_select[1] = ctrl_writeReg == dxinsn_out[21:17];
+    mux_4 alu_mux(dxa_out_bypass, alu_bypass_select, dxa_out, xmo_out, data_writeReg, 32'b0);
+
+    // if rd in xm == rs [21:17] in dx: mx bypass (01)
+    // if rd in mw == rs [21:17] in dx: wx bypass (10)
+    // else operandB (00)
+
+    mux_4 aluinb_mux(operandB_bypass, aluinb_bypass_select, operandB, )
+
+    alu ALU(.data_operandA(dxa_out_bypass), .data_operandB(operandB), .ctrl_ALUopcode(alu_opcode), .ctrl_shiftamt(shamt), .data_result(alu_res), .isNotEqual(isNotEqual), .isLessThan(isLessThan), .overflow(alu_overflow)); 
 
     assign alu_out = (alu_overflow & dx_add) ? 32'd1 :
                     (alu_overflow & dx_addi) ? 32'd2 :
@@ -183,7 +199,7 @@ module processor(
 
     // Latch ALU result
     // Latch instruction
-    wire [31:0] xmo_out, xmb_out, xminsn_out, xminsn_in;
+    wire [31:0] xmb_out, xminsn_out, xminsn_in;
 
     assign xminsn_in[31:27] = dxinsn_out[31:27];
     assign xminsn_in[21:0] = dxinsn_out[21:0];
