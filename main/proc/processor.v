@@ -64,7 +64,7 @@ module processor(
 	/* YOUR CODE STARTS HERE */
 
     wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, dx_bne, dx_blt, dx_bex, tempaddress, dxpc_out, dx_lw;
-    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall;
+    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall, hazard;
 
     assign bne = isNotEqual ? n : 32'b0;
     assign blt = (~isLessThan&isNotEqual) ? n : 32'b0;
@@ -131,22 +131,22 @@ module processor(
     assign n = temp >>> 15;
 
     // bex and setx
-    wire dx_setx, dx_jr, dx_add, dx_addi, dx_sub, dx_multdiv, dx_sw;
+    wire dx_setx, dx_jr, dx_add, dx_addi, dx_sub, dx_multdiv, dx_sw, dx_rtype;
+    assign dx_rtype = opcode==5'b00000;
     assign dx_bex = (opcode==5'b10110) & dxb_out!=31'b0;
     assign dx_setx = (opcode==5'b10101);
-    assign dx_add = (opcode==5'b00000) & (alu_op==5'b00000);
+    assign dx_add = dx_rtype & (alu_op==5'b00000);
     assign dx_addi = (opcode==5'b00101);
-    assign dx_sub = (opcode==5'b00000) & (alu_op==5'b00001);
+    assign dx_sub = dx_rtype & (alu_op==5'b00001);
     assign dx_lw = opcode==5'b01000;
     assign dx_sw = opcode==5'b00111;
 
     assign jump = (opcode==5'b00011) | (opcode==5'b00001) | (opcode==5'b00100);
     assign branch = (opcode==5'b00010) | (opcode==5'b00110);
     assign dx_jr = (opcode==5'b00100);
-    assign t = dx_jr ? dxb_out : tempt;
 
     wire alu_overflow;
-    wire [31:0] alu_res, dxa_out_bypass, dxb_out_bypass, xmo_out;
+    wire [31:0] alu_res, dxa_out_bypass, dxb_out_bypass, xmo_out, dxb;
     wire [1:0] alu_bypass_select, aluinb_bypass_select;
 
     // if rd in xm == rs [21:17] in dx: mx bypass (01)
@@ -161,15 +161,21 @@ module processor(
     // if rd in mw == rt [16:12] in dx: wx bypass (10)
     // else dxb (00)
 
-    assign aluinb_bypass_select[0] = xminsn_out[26:22] == dxinsn_out[16:12] & ~branch & ~dx_sw;
-    assign aluinb_bypass_select[1] = ctrl_writeReg == dxinsn_out[16:12] & ~branch & ~dx_sw;
+    assign dxb = dx_rtype ? dxinsn_out[16:12] :
+                    dx_setx ? 5'd30 : 
+                    dxinsn_out[26:22];
+
+    assign aluinb_bypass_select[0] = xminsn_out[26:22] == dxb;
+    assign aluinb_bypass_select[1] = ctrl_writeReg == dxb;
 
     mux_4 aluinb_mux(dxb_out_bypass, aluinb_bypass_select, dxb_out, xmo_out, data_writeReg, 32'b0);
+
+     assign t = dx_jr ? dxb_out_bypass : tempt;
 
     // Immediate or regB
     wire ALUinB;
     //IF ADDI, CHANGE THIS FOR THE FUTURE
-    assign ALUinB = (opcode==5'b00101)||(opcode==5'b00111)||(opcode==5'b01000);
+    assign ALUinB = dx_addi | dx_lw | dx_sw;
     assign operandB = ALUinB ? n : dxb_out_bypass;
 
     // Use ALU to compute result
@@ -232,7 +238,7 @@ module processor(
 
     // wm bypassing
     // sw rd = lw rd
-    assign data_bypass = ctrl_writeReg == xminsn_out[26:22] & xm_sw & mw_lw;
+    assign data_bypass = ctrl_writeReg == xminsn_out[26:22] & xm_sw;
     assign data = data_bypass ? data_writeReg : xmb_out;
 
     // Latch instruction
@@ -266,7 +272,7 @@ module processor(
 
     assign stall = (~multdiv_resultRDY & (dx_mult | dx_div));
     assign lw_stall = dx_lw & ((fdinsn_out[21:17]==dxinsn_out[26:22]) | ((fdinsn_out[16:12]==dxinsn_out[26:22]) & ~fd_sw));
-    
+    //assign hazard = fdinsn_out[21:17]==dxinsn_out[26:22] | fdinsn_out[16:12]==dxinsn_out[26:22] | 
 	/* END CODE */
 
 endmodule
