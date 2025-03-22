@@ -132,8 +132,9 @@ module processor(
 
     // bex and setx
     wire dx_setx, dx_jr, dx_add, dx_addi, dx_sub, dx_multdiv, dx_sw, dx_rtype;
+    wire xm_rtype, xm_addi, xm_lw, xm_sw, xm_setx;
     assign dx_rtype = opcode==5'b00000;
-    assign dx_bex = (opcode==5'b10110) & dxb_out!=31'b0;
+    assign dx_bex = (opcode==5'b10110) & dxb_out_bypass!=31'b0;
     assign dx_setx = (opcode==5'b10101);
     assign dx_add = dx_rtype & (alu_op==5'b00000);
     assign dx_addi = (opcode==5'b00101);
@@ -145,17 +146,21 @@ module processor(
     assign branch = (opcode==5'b00010) | (opcode==5'b00110);
     assign dx_jr = (opcode==5'b00100);
 
-    wire alu_overflow, xm_lw;
+    wire alu_overflow, xm_uses_rd, dx_uses_rs, mw_uses_rd;
     wire [31:0] alu_res, dxa_out_bypass, dxb_out_bypass, xmo_out, dxb;
     wire [1:0] alu_bypass_select, aluinb_bypass_select;
+
+    assign xm_uses_rd = xm_rtype | xm_addi | xm_lw | xm_setx;
+    assign dx_uses_rs = dx_rtype | dx_addi | dx_lw | dx_sw;
+    assign mw_uses_rd = mw_rtype | mw_addi | mw_lw | mw_setx;
 
     // if rd in xm == rs [21:17] in dx: mx bypass (01)
     // if rd in mw == rs [21:17] in dx: wx bypass (10)
     // else dxa (00)
 
-    assign alu_bypass_select[0] = xminsn_out[26:22] == dxinsn_out[21:17] & ~branch & ~dx_sw;
-    assign alu_bypass_select[1] = ctrl_writeReg == dxinsn_out[21:17] & ~branch & ~dx_sw;
-    mux_4 alu_mux(dxa_out_bypass, alu_bypass_select, dxa_out, xmo_out, data_writeReg, 32'b0);
+    assign alu_bypass_select[0] = (xminsn_out[26:22] == dxinsn_out[21:17]) & xm_uses_rd & dx_uses_rs;
+    assign alu_bypass_select[1] = (ctrl_writeReg == dxinsn_out[21:17]) & mw_uses_rd & dx_uses_rs;
+    mux_4 alu_mux(dxa_out_bypass, alu_bypass_select, dxa_out, xmo_out, data_writeReg, xmo_out);
 
     // if rd in xm == rt [16:12] in dx: mx bypass (01)
     // if rd in mw == rt [16:12] in dx: wx bypass (10)
@@ -165,10 +170,10 @@ module processor(
                     dx_setx ? 5'd30 : 
                     dxinsn_out[26:22];
 
-    assign aluinb_bypass_select[0] = xminsn_out[26:22] == dxb;
-    assign aluinb_bypass_select[1] = ctrl_writeReg == dxb;
+    assign aluinb_bypass_select[0] = (xminsn_out[26:22] == dxb);
+    assign aluinb_bypass_select[1] = (ctrl_writeReg == dxb);
 
-    mux_4 aluinb_mux(dxb_out_bypass, aluinb_bypass_select, dxb_out, xm_lw ? q_dmem : xmo_out, data_writeReg, 32'b0);
+    mux_4 aluinb_mux(dxb_out_bypass, aluinb_bypass_select, dxb_out, xm_lw ? q_dmem : xmo_out, data_writeReg, xm_lw ? q_dmem : xmo_out);
 
     assign t = dx_jr ? dxb_out_bypass : tempt;
 
@@ -230,16 +235,20 @@ module processor(
 
     // Save word
     wire [4:0] xm_opcode = xminsn_out[31:27];
-    wire xm_sw, data_bypass;
+    wire data_bypass;
     assign xm_sw = (xm_opcode==5'b00111);
     assign xm_lw = (xm_opcode==5'b01000);
+    assign xm_rtype = xm_opcode==5'b00000;
+    assign xm_addi = xm_opcode==5'b00101;
+    assign xm_setx = xm_opcode==5'b10101;
 
     assign address_dmem = xmo_out;
     assign wren = xm_sw;
 
     // wm bypassing
     // sw rd = lw rd
-    assign data_bypass = ctrl_writeReg == xminsn_out[26:22] & xm_sw;
+    // | mwinsn_out[21:17] == xminsn_out[26:22]
+    assign data_bypass = (ctrl_writeReg == xminsn_out[26:22]) & xm_sw;
     assign data = data_bypass ? data_writeReg : xmb_out;
 
     // Latch instruction
@@ -250,10 +259,10 @@ module processor(
 
     wire [4:0] mw_opcode, rd;
     assign mw_opcode = mwinsn_out[31:27];
-    wire mw_sw, mw_lw, mw_insnWE, mw_addi, mw_setx, mw_jal;
+    wire mw_sw, mw_lw, mw_rtype, mw_addi, mw_setx, mw_jal;
     assign mw_sw = (mw_opcode==5'b00111);
     assign mw_lw = (mw_opcode==5'b01000);
-    assign mw_insnWE = (mw_opcode==5'b00000);
+    assign mw_rtype = (mw_opcode==5'b00000);
     assign mw_addi = (mw_opcode==5'b00101);
     assign mw_setx = (mw_opcode==5'b10101);
     assign mw_jal = (mw_opcode==5'b00011);
@@ -267,7 +276,7 @@ module processor(
     assign data_writeReg = mw_lw ? q_dmem : mwo_out;
 
     // Set write enable
-    assign ctrl_writeEnable = mw_insnWE | mw_lw | mw_setx | mw_addi | mw_jal;
+    assign ctrl_writeEnable = mw_rtype | mw_lw | mw_setx | mw_addi | mw_jal;
 
     // temporarily until i do branching
 
