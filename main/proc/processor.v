@@ -63,8 +63,8 @@ module processor(
 
 	/* YOUR CODE STARTS HERE */
 
-    wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, dx_bne, dx_blt, dx_bex, tempaddress, dxpc_out;
-    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan;
+    wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, dx_bne, dx_blt, dx_bex, tempaddress, dxpc_out, dx_lw;
+    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall;
 
     assign bne = isNotEqual ? n : 32'b0;
     assign blt = (~isLessThan&isNotEqual) ? n : 32'b0;
@@ -76,14 +76,14 @@ module processor(
 
     assign taken = (dx_bne&isNotEqual) | (dx_blt&~isLessThan&isNotEqual) | jump | dx_bex;
     //assign taken = 1'b0;
-    register pc(.clk(~clock), .writeEnable(~stall), .reset(reset), .writeIn(tempaddress), .readOut(curr_pc));
+    register pc(.clk(~clock), .writeEnable(~stall & ~lw_stall), .reset(reset), .writeIn(tempaddress), .readOut(curr_pc));
     assign address_imem = curr_pc;
     cla pc_add(curr_pc, 32'b1, 1'b0, next_pc, w4,w5);
 
     // ================== FETCH ==================
     // read instruction from imem
     wire [31:0] fdinsn_out, fdpc_out;
-    fd_latch fd(~clock, ~stall, reset, next_pc, fdpc_out, taken ? 32'b0 : q_imem, fdinsn_out);
+    fd_latch fd(~clock, ~stall & ~lw_stall, reset, next_pc, fdpc_out, taken ? 32'b0 : q_imem, fdinsn_out);
 
     // ================== DECODE ==================
     // Use $rstatus (r30)
@@ -106,9 +106,8 @@ module processor(
     // regB = $rt
     // Latch data from RT
     wire [31:0] dxa_out, dxb_out, dxinsn_out, dxinsn_in;
-    assign dxinsn_in = stall ? 32'b0 : fdinsn_out;
-
-    // do i have to flush here???
+    assign dxinsn_in = lw_stall ? 32'b0 : fdinsn_out;
+    
     dx_latch dx(~clock, ~stall, reset, fdpc_out, dxpc_out, taken ? 32'b0 : dxinsn_in, dxinsn_out, data_readRegA, dxa_out, data_readRegB, dxb_out);
 
     // ================== EXECUTE ==================
@@ -117,7 +116,7 @@ module processor(
     wire [4:0] alu_op, opcode, alu_opcode, shamt;
     
     assign alu_op = dxinsn_out[6:2];
-    assign alu_opcode = (opcode==5'b00101)?5'b00000:alu_op;
+    assign alu_opcode = (opcode==5'b00101 | opcode==5'b00111 | opcode==5'b01000) ? 5'b00000 : alu_op;
     assign opcode = dxinsn_out[31:27];
     assign shamt = dxinsn_out[11:7];
     assign tempt[26:0] = dxinsn_out[26:0];
@@ -132,7 +131,7 @@ module processor(
     assign n = temp >>> 15;
 
     // bex and setx
-    wire dx_setx, dx_jr, dx_add, dx_addi, dx_sub, dx_multdiv, dx_lw, dx_sw;
+    wire dx_setx, dx_jr, dx_add, dx_addi, dx_sub, dx_multdiv, dx_sw;
     assign dx_bex = (opcode==5'b10110) & dxb_out!=31'b0;
     assign dx_setx = (opcode==5'b10101);
     assign dx_add = (opcode==5'b00000) & (alu_op==5'b00000);
@@ -233,7 +232,7 @@ module processor(
 
     // wm bypassing
     // sw rd = lw rd
-    assign data_bypass = ctrl_writeReg == xminsn_out[26:22] & xm_sw;
+    assign data_bypass = ctrl_writeReg == xminsn_out[26:22] & xm_sw & mw_lw;
     assign data = data_bypass ? data_writeReg : xmb_out;
 
     // Latch instruction
@@ -265,9 +264,9 @@ module processor(
 
     // temporarily until i do branching
 
-    assign stall = (~multdiv_resultRDY & (dx_mult | dx_div)) | dx_lw & ((fdinsn_out[21:17]==dxinsn_out[26:22]) | ((fdinsn_out[16:12]==dxinsn_out[26:22]) & ~fd_sw));
+    assign stall = (~multdiv_resultRDY & (dx_mult | dx_div));
+    assign lw_stall = dx_lw & ((fdinsn_out[21:17]==dxinsn_out[26:22]) | ((fdinsn_out[16:12]==dxinsn_out[26:22]) & ~fd_sw));
     
 	/* END CODE */
 
 endmodule
-
