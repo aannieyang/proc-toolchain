@@ -62,7 +62,7 @@ module processor(
 	input [31:0] data_readRegA, data_readRegB;
 
 	/* YOUR CODE STARTS HERE */
-
+    //fix bypassing zero, jal bypassing edge case, and comprehensive bypass checking (worse than before)
     wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, dx_bne, dx_blt, dx_bex, tempaddress, dxpc_out, dx_lw;
     wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall, hazard;
 
@@ -158,8 +158,8 @@ module processor(
     // if rd in mw == rs [21:17] in dx: wx bypass (10)
     // else dxa (00)
 
-    assign alu_bypass_select[0] = (xminsn_out[26:22] == dxinsn_out[21:17]) & xm_uses_rd & dx_uses_rs;
-    assign alu_bypass_select[1] = (ctrl_writeReg == dxinsn_out[21:17]) & mw_uses_rd & dx_uses_rs;
+    assign alu_bypass_select[0] = (xminsn_out[26:22] == dxinsn_out[21:17]) & xm_uses_rd & dx_uses_rs & xminsn_out[26:22]!=5'b0;
+    assign alu_bypass_select[1] = (ctrl_writeReg == dxinsn_out[21:17]) & mw_uses_rd & dx_uses_rs & ctrl_writeReg!=5'b0;
     mux_4 alu_mux(dxa_out_bypass, alu_bypass_select, dxa_out, xmo_out, data_writeReg, xmo_out);
 
     // if rd in xm == rt [16:12] in dx: mx bypass (01)
