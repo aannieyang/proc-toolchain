@@ -62,7 +62,7 @@ module processor(
 	input [31:0] data_readRegA, data_readRegB;
 
 	/* YOUR CODE STARTS HERE */
-    //fix bypassing zero, jal bypassing edge case, and comprehensive bypass checking (worse than before)
+    //comprehensive bypass checking (worse than before)
     wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, dx_bne, dx_blt, dx_bex, tempaddress, dxpc_out, dx_lw;
     wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall, hazard;
 
@@ -106,6 +106,7 @@ module processor(
     // regB = $rt
     // Latch data from RT
     wire [31:0] dxa_out, dxb_out, dxinsn_out, dxinsn_in;
+    //assign dxinsn_in = fdinsn_out;
     assign dxinsn_in = lw_stall ? 32'b0 : fdinsn_out;
     
     dx_latch dx(~clock, ~stall, reset, fdpc_out, dxpc_out, taken ? 32'b0 : dxinsn_in, dxinsn_out, data_readRegA, dxa_out, data_readRegB, dxb_out);
@@ -273,7 +274,7 @@ module processor(
                             mw_setx ? 5'd30 :
                             rd;
 
-    assign data_writeReg = mw_lw ? q_dmem : mwo_out;
+    assign data_writeReg = mw_lw ? mwd_out : mwo_out;
 
     // Set write enable
     assign ctrl_writeEnable = mw_rtype | mw_lw | mw_setx | mw_addi | mw_jal;
