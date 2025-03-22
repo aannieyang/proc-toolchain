@@ -145,7 +145,7 @@ module processor(
     assign branch = (opcode==5'b00010) | (opcode==5'b00110);
     assign dx_jr = (opcode==5'b00100);
 
-    wire alu_overflow;
+    wire alu_overflow, xm_lw;
     wire [31:0] alu_res, dxa_out_bypass, dxb_out_bypass, xmo_out, dxb;
     wire [1:0] alu_bypass_select, aluinb_bypass_select;
 
@@ -168,9 +168,9 @@ module processor(
     assign aluinb_bypass_select[0] = xminsn_out[26:22] == dxb;
     assign aluinb_bypass_select[1] = ctrl_writeReg == dxb;
 
-    mux_4 aluinb_mux(dxb_out_bypass, aluinb_bypass_select, dxb_out, xmo_out, data_writeReg, 32'b0);
+    mux_4 aluinb_mux(dxb_out_bypass, aluinb_bypass_select, dxb_out, xm_lw ? q_dmem : xmo_out, data_writeReg, 32'b0);
 
-     assign t = dx_jr ? dxb_out_bypass : tempt;
+    assign t = dx_jr ? dxb_out_bypass : tempt;
 
     // Immediate or regB
     wire ALUinB;
@@ -232,6 +232,7 @@ module processor(
     wire [4:0] xm_opcode = xminsn_out[31:27];
     wire xm_sw, data_bypass;
     assign xm_sw = (xm_opcode==5'b00111);
+    assign xm_lw = (xm_opcode==5'b01000);
 
     assign address_dmem = xmo_out;
     assign wren = xm_sw;
