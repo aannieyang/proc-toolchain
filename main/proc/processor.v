@@ -62,9 +62,9 @@ module processor(
 	input [31:0] data_readRegA, data_readRegB;
 
 	/* YOUR CODE STARTS HERE */
-    //comprehensive bypass checking (worse than before)
+    //comprehensive bypass checking (was 2.25/8)
     wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, dx_bne, dx_blt, dx_bex, tempaddress, dxpc_out, dx_lw;
-    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall, hazard;
+    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall, hazard, xm_bne, xm_blt;
 
     assign bne = isNotEqual ? n : 32'b0;
     assign blt = (~isLessThan&isNotEqual) ? n : 32'b0;
@@ -117,19 +117,10 @@ module processor(
     wire [4:0] alu_op, opcode, alu_opcode, shamt;
     
     assign alu_op = dxinsn_out[6:2];
-    assign alu_opcode = (opcode==5'b00101 | opcode==5'b00111 | opcode==5'b01000) ? 5'b00000 : alu_op;
     assign opcode = dxinsn_out[31:27];
     assign shamt = dxinsn_out[11:7];
     assign tempt[26:0] = dxinsn_out[26:0];
     assign tempt[31:27] = 5'b0;
-
-    assign dx_bne = (opcode==5'b00010);
-    assign dx_blt = (opcode==5'b00110);
-
-    // Sign extending immediate (N)
-    wire signed [31:0] temp;
-    assign temp[31:15] = dxinsn_out[16:0];
-    assign n = temp >>> 15;
 
     // bex and setx
     wire dx_setx, dx_jr, dx_add, dx_addi, dx_sub, dx_multdiv, dx_sw, dx_rtype;
@@ -142,17 +133,28 @@ module processor(
     assign dx_sub = dx_rtype & (alu_op==5'b00001);
     assign dx_lw = opcode==5'b01000;
     assign dx_sw = opcode==5'b00111;
-
+    assign dx_bne = (opcode==5'b00010);
+    assign dx_blt = (opcode==5'b00110);
     assign jump = (opcode==5'b00011) | (opcode==5'b00001) | (opcode==5'b00100);
     assign branch = (opcode==5'b00010) | (opcode==5'b00110);
     assign dx_jr = (opcode==5'b00100);
+
+    assign alu_opcode = (dx_addi | dx_sw | dx_lw) ? 5'b00000 :
+                        (dx_blt | dx_bne) ? 5'b00001 :
+                        alu_op;
+
+
+    // Sign extending immediate (N)
+    wire signed [31:0] temp;
+    assign temp[31:15] = dxinsn_out[16:0];
+    assign n = temp >>> 15;
 
     wire alu_overflow, xm_uses_rd, dx_uses_rs, mw_uses_rd;
     wire [31:0] alu_res, dxa_out_bypass, dxb_out_bypass, xmo_out, dxb;
     wire [1:0] alu_bypass_select, aluinb_bypass_select;
 
     assign xm_uses_rd = xm_rtype | xm_addi | xm_lw | xm_setx;
-    assign dx_uses_rs = dx_rtype | dx_addi | dx_lw | dx_sw;
+    assign dx_uses_rs = dx_rtype | dx_addi | dx_lw | dx_sw | dx_blt | dx_bne;
     assign mw_uses_rd = mw_rtype | mw_addi | mw_lw | mw_setx;
 
     // if rd in xm == rs [21:17] in dx: mx bypass (01)
@@ -216,7 +218,7 @@ module processor(
 
     
     // if setx, use immediate (T), otherwise normal regB
-    assign xmb_in = dx_setx ? t : dxb_out;
+    assign xmb_in = dx_setx ? t : dxb_out_bypass;
 
     // jal => $31 = PC+1
     assign xmo_in = (opcode==5'b00011) ? dxpc_out :
@@ -242,6 +244,8 @@ module processor(
     assign xm_rtype = xm_opcode==5'b00000;
     assign xm_addi = xm_opcode==5'b00101;
     assign xm_setx = xm_opcode==5'b10101;
+    assign xm_blt = xm_opcode==5'b00110;
+    assign xm_bne = xm_opcode==5'b00010;
 
     assign address_dmem = xmo_out;
     assign wren = xm_sw;
