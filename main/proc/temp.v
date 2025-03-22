@@ -64,7 +64,9 @@ module temp(
 	/* YOUR CODE STARTS HERE */
 
     wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, dx_bne, dx_blt, dx_bex, tempaddress, dxpc_out;
-    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan;
+    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, new_stall;
+
+    //assign new_stall = 
 
     assign bne = isNotEqual ? n : 32'b0;
     assign blt = (~isLessThan&isNotEqual) ? n : 32'b0;
@@ -110,7 +112,7 @@ module temp(
     assign dxinsn_in = stall ? 32'b0 : fdinsn_out;
 
     // do i have to flush here???
-    dx_latch dx(~clock, 1'b1, reset, fdpc_out, dxpc_out, taken ? 32'b0 : dxinsn_in, dxinsn_out, data_readRegA, dxa_out, data_readRegB, dxb_out);
+    dx_latch dx(~clock, ~stall, reset, fdpc_out, dxpc_out, taken ? 32'b0 : dxinsn_in, dxinsn_out, data_readRegA, dxa_out, data_readRegB, dxb_out);
 
     // ================== EXECUTE ==================
 
@@ -133,37 +135,47 @@ module temp(
     assign n = temp >>> 15;
 
     // bex and setx
-    wire dx_setx, dx_jr, dx_add, dx_addi, dx_sub, dx_multdiv;
+    wire dx_setx, dx_jr, dx_add, dx_addi, dx_sub, dx_multdiv, dx_lw;
     assign dx_bex = (opcode==5'b10110) & dxb_out!=31'b0;
     assign dx_setx = (opcode==5'b10101);
     assign dx_add = (opcode==5'b00000) & (alu_op==5'b00000);
     assign dx_addi = (opcode==5'b00101);
     assign dx_sub = (opcode==5'b00000) & (alu_op==5'b00001);
+    assign dx_lw = opcode==5'b01000;
 
-    // Immediate or regB
-    wire ALUinB;
-    //IF ADDI, CHANGE THIS FOR THE FUTURE
-    assign ALUinB = (opcode==5'b00101)||(opcode==5'b00111)||(opcode==5'b01000);
-    assign operandB = ALUinB ? n : dxb_out;
+    assign jump = (opcode==5'b00011) | (opcode==5'b00001) | (opcode==5'b00100);
+    assign branch = (opcode==5'b00010) | (opcode==5'b00110);
+    assign dx_jr = (opcode==5'b00100);
+    assign t = dx_jr ? dxb_out : tempt;
 
-    // Use ALU to compute result
     wire alu_overflow;
-    wire [31:0] alu_res, dxa_out_bypass, operandB_bypass, xmo_out;
+    wire [31:0] alu_res, dxa_out_bypass, dxb_out_bypass, xmo_out;
     wire [1:0] alu_bypass_select, aluinb_bypass_select;
 
     // if rd in xm == rs [21:17] in dx: mx bypass (01)
     // if rd in mw == rs [21:17] in dx: wx bypass (10)
     // else dxa (00)
 
-    assign alu_bypass_select[0] = xminsn_out[26:22] == dxinsn_out[21:17];
-    assign alu_bypass_select[1] = ctrl_writeReg == dxinsn_out[21:17];
+    assign alu_bypass_select[0] = xminsn_out[26:22] == dxinsn_out[21:17] & ~branch;
+    assign alu_bypass_select[1] = ctrl_writeReg == dxinsn_out[21:17] & ~branch;
     mux_4 alu_mux(dxa_out_bypass, alu_bypass_select, dxa_out, xmo_out, data_writeReg, 32'b0);
 
-    // if rd in xm == rs [21:17] in dx: mx bypass (01)
-    // if rd in mw == rs [21:17] in dx: wx bypass (10)
-    // else operandB (00)
+    // if rd in xm == rt [16:12] in dx: mx bypass (01)
+    // if rd in mw == rt [16:12] in dx: wx bypass (10)
+    // else dxb (00)
 
-    //mux_4 aluinb_mux(operandB_bypass, aluinb_bypass_select, operandB, )
+    assign aluinb_bypass_select[0] = xminsn_out[26:22] == dxinsn_out[16:12] & ~branch;
+    assign aluinb_bypass_select[1] = ctrl_writeReg == dxinsn_out[16:12] & ~branch;
+
+    mux_4 aluinb_mux(dxb_out_bypass, aluinb_bypass_select, dxb_out, xmo_out, data_writeReg, 32'b0);
+
+    // Immediate or regB
+    wire ALUinB;
+    //IF ADDI, CHANGE THIS FOR THE FUTURE
+    assign ALUinB = (opcode==5'b00101)||(opcode==5'b00111)||(opcode==5'b01000);
+    assign operandB = ALUinB ? n : dxb_out_bypass;
+
+    // Use ALU to compute result
 
     alu ALU(.data_operandA(dxa_out_bypass), .data_operandB(operandB), .ctrl_ALUopcode(alu_opcode), .ctrl_shiftamt(shamt), .data_result(alu_res), .isNotEqual(isNotEqual), .isLessThan(isLessThan), .overflow(alu_overflow)); 
 
@@ -172,59 +184,68 @@ module temp(
                     (alu_overflow & dx_sub) ? 32'd3 :
                     alu_res;
 
-    // if setx, use immediate (T), otherwise normal regB
-    assign xmb_in = dx_setx ? t : dxb_out;
-
-    // jal => $31 = PC+1
-    assign xmo_in = (opcode==5'b00011) ? dxpc_out : (dx_setx ? t : alu_out);
-    assign jump = (opcode==5'b00011) | (opcode==5'b00001) | (opcode==5'b00100);
-    assign branch = (opcode==5'b00010) | (opcode==5'b00110);
-
-    assign dx_jr = (opcode==5'b00100);
-    assign t = dx_jr ? dxb_out : tempt;
-
     // Multdiv
-    wire dx_mult, dx_div, multdiv_exception, multdiv_resultRDY, ready, multdiv_stall, is_mult, is_div;
+    wire dx_mult, dx_div, multdiv_exception, multdiv_resultRDY, mult_running, div_running, running, ctrl_MULT, ctrl_DIV;
     wire [31:0] multdiv_result, multdivinsn_out, multdiv_a, multdiv_b, multdiv_res;
     assign dx_mult = (opcode==5'b0) & (alu_opcode==5'b00110);
     assign dx_div = (opcode==5'b0) & (alu_opcode==5'b00111);
 
-    md_latch multdiv(~clock, dx_mult|dx_div, reset, dxinsn_out, multdivinsn_out, dxa_out, multdiv_a, dxb_out, multdiv_b, multdiv_stall, multdiv_resultRDY, dx_mult, is_mult, dx_div, is_div);
-    multdiv op(.data_operandA(multdiv_a), .data_operandB(multdiv_b), .ctrl_MULT(dx_mult), .ctrl_DIV(dx_div), .clock(clock), .data_result(multdiv_res), .data_exception(multdiv_exception), .data_resultRDY(multdiv_resultRDY));
+    //(q, d, clk, en, clr);
+    dffe_ref mult(.clk(~clock), .clr(reset), .en(1'b1), .d(dx_mult & ~multdiv_resultRDY), .q(mult_running));
+    dffe_ref div(.clk(~clock), .clr(reset), .en(1'b1), .d(dx_div & ~multdiv_resultRDY), .q(div_running));
+    assign running = mult_running | div_running;
+
+    assign ctrl_MULT = dx_mult & ~mult_running;
+    assign ctrl_DIV = dx_div & ~div_running;
+    
+    multdiv multdivop(.data_operandA(dxa_out_bypass), .data_operandB(operandB), .ctrl_MULT(ctrl_MULT), .ctrl_DIV(ctrl_DIV), .clock(clock), .data_result(multdiv_res), .data_exception(multdiv_exception), .data_resultRDY(multdiv_resultRDY));
     
     wire rstatus;
 
-    assign multdiv_result = rstatus&is_mult ? 32'd4 : (rstatus&is_div ? 32'd5 : multdiv_res);
     assign rstatus = (alu_overflow&(opcode==5'b0|opcode==5'b00101)) | (multdiv_exception&multdiv_resultRDY);
+    assign multdiv_result = rstatus&dx_mult ? 32'd4 : (rstatus&dx_div ? 32'd5 : multdiv_res);
 
-    // Latch ALU result
-    // Latch instruction
+    
+    // if setx, use immediate (T), otherwise normal regB
+    assign xmb_in = dx_setx ? t : dxb_out;
+
+    // jal => $31 = PC+1
+    assign xmo_in = (opcode==5'b00011) ? dxpc_out :
+                    dx_setx ? t :
+                    multdiv_resultRDY ? multdiv_result : 
+                    alu_out;
+
     wire [31:0] xmb_out, xminsn_out, xminsn_in;
 
     assign xminsn_in[31:27] = dxinsn_out[31:27];
     assign xminsn_in[21:0] = dxinsn_out[21:0];
-    assign xminsn_in[26:22] = (rstatus&(alu_overflow&(opcode==5'b0|opcode==5'b00101))) ? 5'd30 : dxinsn_out[26:22];
+    assign xminsn_in[26:22] = rstatus ? 5'd30 : dxinsn_out[26:22];
 
-    xm_latch xm(~clock, 1'b1, reset, xminsn_in, xminsn_out, xmo_in, xmo_out, xmb_in, xmb_out);
+    xm_latch xm(~clock, ~stall, reset, xminsn_in, xminsn_out, xmo_in, xmo_out, xmb_in, xmb_out);
 
     // ================== MEMORY ==================
 
     // Save word
     wire [4:0] xm_opcode = xminsn_out[31:27];
-    wire xm_sw;
+    wire xm_sw, data_bypass;
     assign xm_sw = (xm_opcode==5'b00111);
 
     assign address_dmem = xmo_out;
     assign wren = xm_sw;
-    assign data = xmb_out;
+
+    // wm bypassing
+    // sw rd = lw rd
+    assign data_bypass = ctrl_writeReg == xminsn_out[26:22] & xm_sw & mw_lw;
+    assign data = data_bypass ? data_writeReg : xmb_out;
 
     // Latch instruction
     wire [31:0] mwinsn_out, mwo_out, mwd_out;
-    mw_latch mw(~clock, 1'b1, reset, xminsn_out, mwinsn_out, xmo_out, mwo_out, q_dmem, mwd_out);
+    mw_latch mw(~clock, ~stall, reset, xminsn_out, mwinsn_out, xmo_out, mwo_out, q_dmem, mwd_out);
 
     // ================== WRITEBACK ==================
 
-    wire [4:0] mw_opcode = mwinsn_out[31:27];
+    wire [4:0] mw_opcode, rd;
+    assign mw_opcode = mwinsn_out[31:27];
     wire mw_sw, mw_lw, mw_insnWE, mw_addi, mw_setx, mw_jal;
     assign mw_sw = (mw_opcode==5'b00111);
     assign mw_lw = (mw_opcode==5'b01000);
@@ -232,22 +253,23 @@ module temp(
     assign mw_addi = (mw_opcode==5'b00101);
     assign mw_setx = (mw_opcode==5'b10101);
     assign mw_jal = (mw_opcode==5'b00011);
+    assign rd = mwinsn_out[26:22];
     
     // Set destination register and data to write
-    assign ctrl_writeReg = multdiv_resultRDY ? (rstatus ? 5'd30 : multdivinsn_out[26:22]) :
-                            mw_jal ? 5'd31 :
+    assign ctrl_writeReg = mw_jal ? 5'd31 :
                             mw_setx ? 5'd30 :
-                            mwinsn_out[26:22];
+                            rd;
 
-    assign data_writeReg = mw_lw ? q_dmem : (multdiv_resultRDY ? multdiv_result : mwo_out);
+    assign data_writeReg = mw_lw ? q_dmem : mwo_out;
 
     // Set write enable
     assign ctrl_writeEnable = mw_insnWE | mw_lw | mw_setx | mw_addi | mw_jal;
 
     // temporarily until i do branching
 
-    assign stall = multdiv_stall | dx_mult | dx_div;
-
+    assign stall = (~multdiv_resultRDY & (dx_mult | dx_div)) | dx_lw & ((fdinsn_out[21:17]==dxinsn_out[26:22]) | ((fdinsn_out[16:12]==dxinsn_out[26:22]) & ~fd_sw));
+    
 	/* END CODE */
 
 endmodule
+

@@ -11,7 +11,6 @@
 ./multdiv.v
 ./rbarrel_2.v
 ./rbarrel_8.v
-./md_latch.v
 ./xm_latch.v
 ./div.v
 ./barrel_2.v
