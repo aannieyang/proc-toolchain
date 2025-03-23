@@ -74,7 +74,6 @@ module processor(
     assign tempaddress = jump ? t : (dx_bne&isNotEqual ? branchedbne : (dx_blt&~isLessThan&isNotEqual ? branchedblt : (do_bex ? t : next_pc)));
 
     assign taken = (dx_bne&isNotEqual) | (dx_blt&~isLessThan&isNotEqual) | jump | do_bex;
-    //assign taken = 1'b0;
     register pc(.clk(~clock), .writeEnable(~stall & ~lw_stall), .reset(reset), .writeIn(tempaddress), .readOut(curr_pc));
     assign address_imem = curr_pc;
     cla pc_add(curr_pc, 32'b1, 1'b0, next_pc, w4,w5);
@@ -105,7 +104,6 @@ module processor(
     // regB = $rt
     // Latch data from RT
     wire [31:0] dxa_out, dxb_out, dxinsn_out, dxinsn_in;
-    //assign dxinsn_in = fdinsn_out;
     assign dxinsn_in = lw_stall ? 32'b0 : fdinsn_out;
     
     dx_latch dx(~clock, ~stall, reset, fdpc_out, dxpc_out, taken ? 32'b0 : dxinsn_in, dxinsn_out, data_readRegA, dxa_out, data_readRegB, dxb_out);
@@ -142,7 +140,6 @@ module processor(
     assign alu_opcode = (dx_addi | dx_sw | dx_lw) ? 5'b00000 :
                         (dx_blt | dx_bne) ? 5'b00001 :
                         alu_op;
-
 
     // Sign extending immediate (N)
     wire signed [31:0] temp;
@@ -183,12 +180,10 @@ module processor(
 
     // Immediate or regB
     wire ALUinB;
-    //IF ADDI, CHANGE THIS FOR THE FUTURE
     assign ALUinB = dx_addi | dx_lw | dx_sw;
     assign operandB = ALUinB ? n : dxb_out_bypass;
 
     // Use ALU to compute result
-
     alu ALU(.data_operandA(dxa_out_bypass), .data_operandB(operandB), .ctrl_ALUopcode(alu_opcode), .ctrl_shiftamt(shamt), .data_result(alu_res), .isNotEqual(isNotEqual), .isLessThan(isLessThan), .overflow(alu_overflow)); 
 
     assign alu_out = (alu_overflow & dx_add) ? 32'd1 :
@@ -284,11 +279,8 @@ module processor(
     // Set write enable
     assign ctrl_writeEnable = (mw_rtype | mw_lw | mw_setx | mw_addi | mw_jal) & ctrl_writeReg!=5'b0;
 
-    // temporarily until i do branching
-
     assign stall = (~multdiv_resultRDY & (dx_mult | dx_div));
     assign lw_stall = dx_lw & ((fdinsn_out[21:17]==dxinsn_out[26:22]) | ((fdinsn_out[16:12]==dxinsn_out[26:22]) & ~fd_sw));
-    //assign hazard = fdinsn_out[21:17]==dxinsn_out[26:22] | fdinsn_out[16:12]==dxinsn_out[26:22] | 
 	/* END CODE */
 
 endmodule
