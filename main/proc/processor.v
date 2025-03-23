@@ -162,7 +162,7 @@ module processor(
     // else dxa (00)
 
     assign alu_bypass_select[0] = (xminsn_out[26:22] == dxinsn_out[21:17]) & xm_uses_rd & dx_uses_rs & xminsn_out[26:22]!=5'b0;
-    assign alu_bypass_select[1] = (ctrl_writeReg == dxinsn_out[21:17]) & mw_uses_rd & dx_uses_rs & ctrl_writeReg!=5'b0;
+    assign alu_bypass_select[1] = (ctrl_writeReg == dxinsn_out[21:17]) & mw_uses_rd & dx_uses_rs & ctrl_writeReg!=5'b0 & ctrl_writeEnable;
     mux_4 alu_mux(dxa_out_bypass, alu_bypass_select, dxa_out, xmo_out, data_writeReg, xmo_out);
 
     // if rd in xm == rt [16:12] in dx: mx bypass (01)
@@ -173,8 +173,8 @@ module processor(
                     dx_setx ? 5'd30 : 
                     dxinsn_out[26:22];
 
-    assign aluinb_bypass_select[0] = (xminsn_out[26:22] == dxb);
-    assign aluinb_bypass_select[1] = (ctrl_writeReg == dxb);
+    assign aluinb_bypass_select[0] = (xminsn_out[26:22] == dxb) & ~xm_sw;
+    assign aluinb_bypass_select[1] = (ctrl_writeReg == dxb) & ctrl_writeEnable & ctrl_writeReg!=5'b0;
 
     mux_4 aluinb_mux(dxb_out_bypass, aluinb_bypass_select, dxb_out, xm_lw ? q_dmem : xmo_out, data_writeReg, xm_lw ? q_dmem : xmo_out);
 
@@ -223,7 +223,7 @@ module processor(
     // jal => $31 = PC+1
     assign xmo_in = (opcode==5'b00011) ? dxpc_out :
                     dx_setx ? t :
-                    multdiv_resultRDY ? multdiv_result : 
+                    multdiv_resultRDY&(dx_mult|dx_div) ? multdiv_result : 
                     alu_out;
 
     wire [31:0] xmb_out, xminsn_out, xminsn_in;
@@ -253,7 +253,7 @@ module processor(
     // wm bypassing
     // sw rd = lw rd
     // | mwinsn_out[21:17] == xminsn_out[26:22]
-    assign data_bypass = (ctrl_writeReg == xminsn_out[26:22]) & xm_sw;
+    assign data_bypass = (ctrl_writeReg == xminsn_out[26:22]) & xm_sw & mw_lw;
     assign data = data_bypass ? data_writeReg : xmb_out;
 
     // Latch instruction
