@@ -62,7 +62,6 @@ module processor(
 	input [31:0] data_readRegA, data_readRegB;
 
 	/* YOUR CODE STARTS HERE */
-    //comprehensive bypass checking (was 2.25/8)
     wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, tempaddress, dxpc_out, dx_lw;
     wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall, hazard, xm_bne, xm_blt, dx_bne, dx_blt, dx_bex, do_bex;
 
