@@ -63,8 +63,8 @@ module processor(
 
 	/* YOUR CODE STARTS HERE */
     //comprehensive bypass checking (was 2.25/8)
-    wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, dx_bne, dx_blt, dx_bex, tempaddress, dxpc_out, dx_lw;
-    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall, hazard, xm_bne, xm_blt;
+    wire [31:0] curr_pc, next_pc, n, t, branchedbne, branchedblt, blt, bne, tempaddress, dxpc_out, dx_lw;
+    wire w4,w5,w6,w7,w8,w9,w10,w11, stall, taken, jump, branch, isNotEqual, isLessThan, lw_stall, hazard, xm_bne, xm_blt, dx_bne, dx_blt, dx_bex, do_bex;
 
     assign bne = isNotEqual ? n : 32'b0;
     assign blt = (~isLessThan&isNotEqual) ? n : 32'b0;
@@ -72,9 +72,9 @@ module processor(
     cla branch_add(dxpc_out, bne, 1'b0, branchedbne, w8,w9);
     cla branch_add2(dxpc_out, blt, 1'b0, branchedblt, w10,w11);
 
-    assign tempaddress = jump ? t : (dx_bne ? branchedbne : (dx_blt ? branchedblt : (dx_bex ? t : next_pc)));
+    assign tempaddress = jump ? t : (dx_bne&isNotEqual ? branchedbne : (dx_blt&~isLessThan&isNotEqual ? branchedblt : (do_bex ? t : next_pc)));
 
-    assign taken = (dx_bne&isNotEqual) | (dx_blt&~isLessThan&isNotEqual) | jump | dx_bex;
+    assign taken = (dx_bne&isNotEqual) | (dx_blt&~isLessThan&isNotEqual) | jump | do_bex;
     //assign taken = 1'b0;
     register pc(.clk(~clock), .writeEnable(~stall & ~lw_stall), .reset(reset), .writeIn(tempaddress), .readOut(curr_pc));
     assign address_imem = curr_pc;
@@ -126,7 +126,8 @@ module processor(
     wire dx_setx, dx_jr, dx_add, dx_addi, dx_sub, dx_multdiv, dx_sw, dx_rtype;
     wire xm_rtype, xm_addi, xm_lw, xm_sw, xm_setx;
     assign dx_rtype = opcode==5'b00000;
-    assign dx_bex = (opcode==5'b10110) & dxb_out_bypass!=31'b0;
+    assign dx_bex = (opcode==5'b10110);
+    assign do_bex = dx_bex & dxb_out_bypass!=31'b0;
     assign dx_setx = (opcode==5'b10101);
     assign dx_add = dx_rtype & (alu_op==5'b00000);
     assign dx_addi = (opcode==5'b00101);
@@ -150,7 +151,7 @@ module processor(
     assign n = temp >>> 15;
 
     wire alu_overflow, xm_uses_rd, dx_uses_rs, mw_uses_rd;
-    wire [31:0] alu_res, dxa_out_bypass, dxb_out_bypass, xmo_out, dxb;
+    wire [31:0] alu_res, dxa_out_bypass, dxb_out_bypass, xmo_out, dxb, checkZero;
     wire [1:0] alu_bypass_select, aluinb_bypass_select;
 
     assign xm_uses_rd = xm_rtype | xm_addi | xm_lw | xm_setx;
@@ -173,10 +174,11 @@ module processor(
                     dx_setx ? 5'd30 : 
                     dxinsn_out[26:22];
 
-    assign aluinb_bypass_select[0] = (xminsn_out[26:22] == dxb) & ~xm_sw;
+    assign aluinb_bypass_select[0] = (xminsn_out[26:22] == dxb) & ~xm_sw & ~(xm_blt|xm_bne) & xminsn_out!=32'b0;
     assign aluinb_bypass_select[1] = (ctrl_writeReg == dxb) & ctrl_writeEnable & ctrl_writeReg!=5'b0;
 
-    mux_4 aluinb_mux(dxb_out_bypass, aluinb_bypass_select, dxb_out, xm_lw ? q_dmem : xmo_out, data_writeReg, xm_lw ? q_dmem : xmo_out);
+    mux_4 aluinb_mux(checkZero, aluinb_bypass_select, dxb_out, xm_lw ? q_dmem : xmo_out, data_writeReg, xm_lw ? q_dmem : xmo_out);
+    assign dxb_out_bypass = dxb!=5'b0|dx_bex? checkZero : 32'b0;
 
     assign t = dx_jr ? dxb_out_bypass : tempt;
 
@@ -281,7 +283,7 @@ module processor(
     assign data_writeReg = mw_lw ? mwd_out : mwo_out;
 
     // Set write enable
-    assign ctrl_writeEnable = mw_rtype | mw_lw | mw_setx | mw_addi | mw_jal;
+    assign ctrl_writeEnable = (mw_rtype | mw_lw | mw_setx | mw_addi | mw_jal) & ctrl_writeReg!=5'b0;
 
     // temporarily until i do branching
 
